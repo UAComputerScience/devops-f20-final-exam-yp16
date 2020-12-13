@@ -3,7 +3,9 @@
 cmake_minimum_required(VERSION 3.18.4)
 
 # project info # @NOTE Comment doesn't add anything
-project(markturn VERSION "1.0.0")
+project(markturn VERSION "0.9.5")
+message("VERSION: " ${PROJECT_VERSION})
+message("MAJOR VERSION: " ${PROJECT_VERSION_MAJOR})
 
 option(LINK_STATIC "Build with static library" OFF)
 message("LINK_STATIC: ${LINK_STATIC}")
@@ -12,72 +14,75 @@ find_package(CURL REQUIRED)
 message("-- curl include: " ${CURL_INCLUDE_DIR})
 message("-- curl library: " ${CURL_LIBRARY})
 
-find_package(yaml-cpp REQUIRED)
-message("-- yaml-cpp include: " ${YAML_CPP_INCLUDE_DIR})
-message("-- yaml-cpp library: " ${YAML_CPP_LIBRARY})
-
 find_package(LibXml2 REQUIRED)
 message("-- libxml2 include: " ${LIBXML2_INCLUDE_DIR})
 message("-- libxml2 library: " ${LIBXML2_LIBRARY})
 
-find_package(jsoncpp REQUIRED)
-message("-- jsoncpp include: " ${JSONCPP_INCLUDE_DIRS})
-message("-- jsoncpp library: " ${JSONCPP_LIBRARIES})
+# Use find path to find json and yaml
+find_path(jsonLib REQUIRED NAMES json/json.h PATHS /usr/include/jsoncpp /usr/include/json)
+find_path(yamlLib REQUIRED NAMES yaml.h PATHS /usr/include/yaml-cpp)
 
-# Build markturn
-file(GLOB CLIENT_SOURCES "src/*.cpp")
-add_executable(markturn ${CLIENT_SOURCES})
+# Builds markturn
+set(markturn src/markturn.cpp)
+add_executable(markturn ${markturn})
+
+# Builds with static or library
 if(LINK_STATIC)
-	message("Static library")
-	target_link_libraries(markturn PUBLIC libmarkturn)
+    message("-- Static library")
+    target_link_libraries(markturn PUBLIC markturn_static)
 else()
-	message("Shared library")
-	target_link_libraries(markturn PUBLIC libmarkturn_shared)
+    message("-- Shared library")
+    target_link_libraries(markturn PUBLIC markturn_shared)
 endif()
-target_include_directories(markturn PUBLIC src)
 
 install(TARGETS markturn RUNTIME)
 
-# @NOTE Why isn't an object library used?
-# libraries
-file(GLOB LIBRARY_SOURCES "src/*.cpp")
+# Object library 
+file(GLOB LIBRARY_SOURCES "src/libmarkturn.cpp" "src/*Format.cpp")
+set(LIB_DIRS ${yamlLib} ${jsonLib} ${LIBXML2_INCLUDE_DIR})
+add_library(markturnobj OBJECT ${LIBRARY_SOURCES})
+target_include_directories(markturnobj PUBLIC ${LIB_DIRS})
 
-# @NOTE Use variable for long lists of duplicated libraries and include files
-# static libmarkturn
-add_library(libmarkturn STATIC ${LIBRARY_SOURCES})
-target_include_directories(libmarkturn PUBLIC ${CURL_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR} ${LIBXML2_INCLUDE_DIR} ${JSONCPP_INCLUDE_DIRS} /usr/include/yaml-cpp /usr/include/jsoncpp .)
-target_link_libraries(libmarkturn PUBLIC ${CURL_LIBRARY} ${LIBXML2_LIBRARY} ${YAML_CPP_LIBRARY} ${JSONCPP_LIBRARIES})
+# Static libmarkturn library
+add_library(markturn_static STATIC $<TARGET_OBJECTS:markturnobj>)
+target_link_libraries(markturn_static PUBLIC ${CURL_LIBRARIES})
+install(TARGETS markturn_static LIBRARY)
 
-install(TARGETS libmarkturn LIBRARY)  # @NOTE This is part of the proceeding paragraph
-
-# shared libmarkturn library
-add_library(libmarkturn_shared SHARED ${LIBRARY_SOURCES})
-target_include_directories(libmarkturn_shared PUBLIC ${CURL_INCLUDE_DIR} ${YAML_CPP_INCLUDE_DIR} ${LIBXML2_INCLUDE_DIR} ${JSONCPP_INCLUDE_DIRS} /usr/include/yaml-cpp /usr/include/jsoncpp .)
-target_link_libraries(libmarkturn_shared PUBLIC ${CURL_LIBRARY} ${LIBXML2_LIBRARY} ${YAML_CPP_LIBRARY} ${JSONCPP_LIBRARIES})
-set_target_properties(libmarkturn_shared PROPERTIES OUTPUT_NAME libmarkturn)
-set_target_properties(libmarkturn_shared PROPERTIES VERSION ${PROJECT_VERSION})
-set_target_properties(libmarkturn_shared PROPERTIES SDVERSION ${PROJECT_VERSION_MAJOR})
-
-install(TARGETS libmarkturn_shared LIBRARY) # @NOTE This is part of the proceeding paragraph
+# Shared libmarkturn library
+add_library(markturn_shared SHARED $<TARGET_OBJECTS:markturnobj>)
+target_link_libraries(markturn_shared PUBLIC ${CURL_LIBRARIES})
+set_target_properties(markturn_shared PROPERTIES VERSION ${PROJECT_VERSION})
+set_target_properties(markturn_shared PROPERTIES SOVERSION ${PROJECT_VERSION_MAJOR})
+install(TARGETS markturn_shared LIBRARY)
 
 # Setup testing
 enable_testing()
 
-file(GLOB TEST_SOURCES "test/*.cpp")
+# all .cpp files in test/ are independent test programs
+file(GLOB TEST_SOURCES test/*.cpp)
 foreach(TESTFILE ${TEST_SOURCES})
-	get_filename_component(TEST_NAME ${TESTFILE} NAME_WLE)
-	add_executable(${TEST_NAME} ${TESTFILE})
-	target_link_libraries(${TEST_NAME} PUBLIC libmarkturn_shared)
-	target_include_directories(${TEST_NAME} PUBLIC ${CMAKE_SOURCE_DIR} ${CMAKE_SOURCE_DIR}/src)
-	add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    get_filename_component(TEST_NAME ${TESTFILE} NAME_WLE)
+    add_executable(${TEST_NAME} ${TESTFILE})
+
+    if(LINK_STATIC)
+        target_link_libraries(${TEST_NAME} PUBLIC markturn_static)
+        target_include_directories(${TEST_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/src)
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    else()
+        target_link_libraries(${TEST_NAME} PUBLIC markturn_shared)
+        target_include_directories(${TEST_NAME} PUBLIC ${CMAKE_SOURCE_DIR}/src)
+        add_test(NAME ${TEST_NAME} COMMAND ${TEST_NAME})
+    endif()
+
+#  message("-- Added test" ${TEST_NAME} command ${TEST_NAME} progress ${TESTFILE})
 endforeach()
+
 
 # Generate Simple Package
 # @NOTE Keep comments consistent, even with capitalization, i.e., "Generate simple package"
-set(CPACK_PACKAGE_NAME "markturnpack")
+set(CPACK_PACKAGE_NAME "markturn")
 set(CPACK_PACKAGE_VERSION_MAJOR "1")
 set(CPACK_PACKAGE_VERSION_MINOR "0")
 set(CPACK_PACKAGE_VERSION_PATCH "0")
-set(CPACK_PACKAGE_CONTACT "jpp52@zips.uakron.edu")
+set(CPACK_PACKAGE_CONTACT "yp16@zips.uakron.edu")
 include(CPack)
-# @NOTE Leave a single, blank line at the end of the file
