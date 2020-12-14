@@ -1,4 +1,4 @@
-#Comparison
+# Comparison
 
 Jenkins and CircleCi have same functionality, but the difference between two is the ease of use. 
 Running jenkins may be difficult without experience with docker. In Jenkins, setting build environmnet is little complicated. 
@@ -11,27 +11,27 @@ with group member. But, I need to upload for testing each work. Also, CircleCI h
 while jenkins manually debug by clicking action. The Jenkins environment changes only when the user directs it, but CircleCi have matter of changing 
 the environment without notice. Also, we cannot get many information about what's going on inside. So, finding bug is not easy. 
 
-#My feature
+# My feature
 
-##Timeout
+## Timeout
 Jenkns stops running the pipe line when global runtime limit is specified. It allows to define time limits at a 
 certain stage. This function prevents jenkins from disrupting operation. 
 
-'''
+```
 options {
         timeout(time: 1, unit: 'HOURS') 
    }
-'''
+```
 
-##archiveArtifacts
+## archiveArtifacts
 The archiveArtifacts allows developers to access package through jenkins UI and download later. 
 Also, if build is successful, onlyIfSuccessful: true will run. Using post, 
 all shell commands are completed and you can access the named build file.
 
-'''
+```
    post {
        success{
           archiveArtifacts artifacts: 'build/*.deb', onlyIfSuccessful: true
        }
    }
-'''
+```
